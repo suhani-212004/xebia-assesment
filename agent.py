@@ -141,7 +141,7 @@ def _assistant_message(msg) -> dict:
     return out
 
 
-def run_agent(user_message: str, verbose: bool = True, client: OpenAI = None) -> str:
+def run_agent(user_message: str, client: OpenAI = None) -> str:
     """Run the ReAct loop for one customer message; return the final text answer."""
     if client is None:
         client = _client()
@@ -152,8 +152,6 @@ def run_agent(user_message: str, verbose: bool = True, client: OpenAI = None) ->
     ]
 
     for iteration in range(1, MAX_ITERATIONS + 1):
-        if verbose:
-            print(f"\n--- Iteration {iteration} ---")
 
         # Graceful error recovery: model failures are caught and reported,
         # never crash the loop.
@@ -166,16 +164,12 @@ def run_agent(user_message: str, verbose: bool = True, client: OpenAI = None) ->
                 temperature=0.2,
             )
         except Exception as e:  # noqa: BLE001
-            detail = str(e)[:300]
             friendly = (
                 "I ran into a problem reaching the resolution service and couldn't "
                 "complete your request right now. Please try again shortly, or a "
                 "specialist will follow up if needed."
             )
-            if verbose:
-                print(f"\n[MODEL ERROR] {type(e).__name__}: {detail}")
-                print("\n[FINAL ANSWER]\n")
-                print(friendly)
+            print(f"\nagent> {friendly}")
             return friendly
 
         msg = response.choices[0].message
@@ -183,21 +177,13 @@ def run_agent(user_message: str, verbose: bool = True, client: OpenAI = None) ->
 
         # No tool calls => final answer => exit the loop.
         if not msg.tool_calls:
-            if verbose:
-                print("\n[FULLY RESOLVED - final answer]\n")
-                print(msg.content or "")
+            print(f"\nagent> {msg.content or ''}")
             return msg.content or ""
 
         # Execute every requested tool through the safe dispatcher and feed
         # the structured result back into the conversation state.
         for call in msg.tool_calls:
-            name = call.function.name
-            raw_args = call.function.arguments
-            if verbose:
-                print(f"Tool call -> {name}({raw_args})")
-            result = dispatch(name, raw_args)
-            if verbose:
-                print(f"Result   -> {json.dumps(result)}")
+            result = dispatch(call.function.name, call.function.arguments)
             messages.append(
                 {
                     "role": "tool",
@@ -212,8 +198,7 @@ def run_agent(user_message: str, verbose: bool = True, client: OpenAI = None) ->
         "steps. I've flagged this session for human escalation, and a specialist "
         "will follow up with you shortly."
     )
-    if verbose:
-        print("\n[MAX ITERATIONS REACHED - halting and escalating to a human]")
+    print(f"\nagent> {escalation}")
     return escalation
 
 
@@ -266,7 +251,7 @@ def demo() -> None:
         print("SCENARIO:", title)
         print("=" * 84)
         print("Customer:", message)
-        run_agent(message, verbose=True, client=client)
+        run_agent(message, client=client)
         _print_resulting_state()
 
 
@@ -305,7 +290,7 @@ def interactive_console() -> None:
             demo()
             database.reset_state()
             continue
-        run_agent(message, verbose=True, client=client)
+        run_agent(message, client=client)
 
 
 # ---------------------------------------------------------------------------
@@ -322,7 +307,7 @@ def main() -> None:
     else:
         # Treat CLI arguments as a single customer message.
         database.reset_state()
-        run_agent(joined, verbose=True)
+        run_agent(joined)
 
 
 if __name__ == "__main__":
