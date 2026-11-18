@@ -38,8 +38,14 @@ from schemas import TOOL_SCHEMAS
 from dispatcher import dispatch
 import database
 
-SYSTEM_PROMPT = """\
-You are an autonomous order-resolution specialist for an online store.
+# Role label used in the system message and displayed in the console header.
+SYSTEM_ROLE = "customer assistant"
+
+# Temperature = 0 means fully deterministic responses (no randomness).
+TEMPERATURE = 0
+
+SYSTEM_PROMPT = f"""\
+You are a {SYSTEM_ROLE} for an online store.
 
 When a customer reports a problem with an item, resolve it end-to-end using the
 available tools. YOU decide which tools to call and in what order - do not ask
@@ -150,7 +156,6 @@ def run_agent(user_message: str, client: OpenAI = None) -> str:
         {"role": "system", "content": SYSTEM_PROMPT},
         {"role": "user", "content": user_message},
     ]
-
     for iteration in range(1, MAX_ITERATIONS + 1):
 
         # Graceful error recovery: model failures are caught and reported,
@@ -161,7 +166,7 @@ def run_agent(user_message: str, client: OpenAI = None) -> str:
                 messages=messages,
                 tools=TOOL_SCHEMAS,
                 tool_choice="auto",
-                temperature=0.2,
+                temperature=TEMPERATURE,
             )
         except Exception as e:  # noqa: BLE001
             friendly = (
@@ -263,8 +268,8 @@ def interactive_console() -> None:
     client = _client()
     database.reset_state()
     print("=" * 70)
-    print(" Decision-Making Resolution Agent")
-    print(f" model: {MODEL}  endpoint: {os.environ.get('OPENAI_BASE_URL', 'openai')}")
+    print(f" Role: {SYSTEM_ROLE}  |  model: {MODEL}  |  temperature: {TEMPERATURE}")
+    print(f" endpoint: {os.environ.get('OPENAI_BASE_URL', 'openai')}")
     print("=" * 70)
     print("Type a customer message and press Enter.")
     print("Commands:  demo   = run the four scripted scenarios")
